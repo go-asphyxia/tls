@@ -11,9 +11,8 @@ import (
 )
 
 type (
-	Configuration struct {
-		configuration tls.Config
-		Error         error
+	TLS struct {
+		TLSConfiguration *tls.Config
 	}
 )
 
@@ -65,74 +64,71 @@ var (
 )
 
 var (
-	ErrConfigurationAutoNoDomains = errors.New("you must set at least one domain for tls certificate generation")
-	ErrNewUnknownVersion          = errors.New("you must use valid tls version from go's crypto/tls package")
-	ErrNewLegacyMode              = errors.New("you selected legacy tls version")
+	ErrTLSAutoNoDomains     = errors.New("you must set at least one domain for tls certificate generation")
+	ErrNewTLSUnknownVersion = errors.New("NewTLS: unknown version")
+	ErrNewTLSLegacyMode     = errors.New("NewTLS: legacy mode")
 )
 
-func New(tlsVersion int) (c *Configuration) {
-	c = new(Configuration)
-
-	c.configuration.ClientAuth = tls.VerifyClientCertIfGiven
-	c.configuration.Renegotiation = tls.RenegotiateOnceAsClient
-
-	c.configuration.MaxVersion = tls.VersionTLS13
+func NewTLS(tlsVersion int) (t *TLS, err error) {
+	t = &TLS{
+		TLSConfiguration: &tls.Config{
+			ClientAuth:    tls.VerifyClientCertIfGiven,
+			Renegotiation: tls.RenegotiateOnceAsClient,
+			MaxVersion:    tls.VersionTLS13,
+		},
+	}
 
 	switch tlsVersion {
 	case Version13:
-		c.configuration.MinVersion = tls.VersionTLS13
+		t.TLSConfiguration.MinVersion = tls.VersionTLS13
 	case Version12:
-		c.configuration.MinVersion = tls.VersionTLS12
-		c.configuration.CipherSuites = tls12CipherSuites
+		t.TLSConfiguration.MinVersion = tls.VersionTLS12
+		t.TLSConfiguration.CipherSuites = tls12CipherSuites
 	case Version11:
-		c.Error = ErrNewLegacyMode
-		c.configuration.MinVersion = tls.VersionTLS11
-		c.configuration.CipherSuites = legacyCipherSuites
+		err = ErrNewTLSLegacyMode
+		t.TLSConfiguration.MinVersion = tls.VersionTLS11
+		t.TLSConfiguration.CipherSuites = legacyCipherSuites
 	case Version10:
-		c.Error = ErrNewLegacyMode
-		c.configuration.MinVersion = tls.VersionTLS10
-		c.configuration.CipherSuites = legacyCipherSuites
+		err = ErrNewTLSLegacyMode
+		t.TLSConfiguration.MinVersion = tls.VersionTLS10
+		t.TLSConfiguration.CipherSuites = legacyCipherSuites
 	default:
-		c.Error = ErrNewUnknownVersion
-		return
+		err = ErrNewTLSUnknownVersion
 	}
 
 	return
 }
 
-func (c *Configuration) AddCertificate(certificatePath, keyPath string) {
+func (t *TLS) AddCertificate(certificatePath, keyPath string) (err error) {
 	ready, err := tls.LoadX509KeyPair(certificatePath, keyPath)
 
 	if err != nil {
-		c.Error = err
 		return
 	}
 
-	c.configuration.Certificates = append(c.configuration.Certificates, ready)
+	t.TLSConfiguration.Certificates = append(t.TLSConfiguration.Certificates, ready)
 	return
 }
 
-func (c *Configuration) AddEmbededCertificate(certificate, key []byte) (err error) {
+func (t *TLS) AddEmbededCertificate(certificate, key []byte) (err error) {
 	ready, err := tls.X509KeyPair(certificate, key)
 
 	if err != nil {
-		c.Error = err
 		return
 	}
 
-	c.configuration.Certificates = append(c.configuration.Certificates, ready)
+	t.TLSConfiguration.Certificates = append(t.TLSConfiguration.Certificates, ready)
 	return
 }
 
-func (c *Configuration) Default() (configuration *tls.Config) {
-	configuration = c.configuration.Clone()
-
+func (t *TLS) Clone() (tlsConfiguration *tls.Config) {
+	tlsConfiguration = t.TLSConfiguration.Clone()
 	return
 }
 
-func (c *Configuration) Auto(email, certificatesCachePath string, hosts ...string) (configuration *tls.Config) {
+func (t *TLS) Auto(email, certificatesCachePath string, hosts ...string) (tlsConfiguration *tls.Config, err error) {
 	if len(hosts) < 1 {
-		c.Error = ErrConfigurationAutoNoDomains
+		err = ErrTLSAutoNoDomains
 		return
 	}
 
@@ -141,24 +137,23 @@ func (c *Configuration) Auto(email, certificatesCachePath string, hosts ...strin
 	}
 
 	executable, err := os.Executable()
-
 	if err != nil {
-		c.Error = err
 		return
 	}
 
 	directory := path.Dir(executable)
 	cache := path.Join(directory, certificatesCachePath)
 
-	manager := new(autocert.Manager)
-	manager.Prompt = autocert.AcceptTOS
-	manager.Cache = autocert.DirCache(cache)
-	manager.HostPolicy = autocert.HostWhitelist(hosts...)
-	manager.Email = email
+	manager := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache(cache),
+		HostPolicy: autocert.HostWhitelist(hosts...),
+		Email:      email,
+	}
 
-	configuration = c.configuration.Clone()
-	configuration.GetCertificate = manager.GetCertificate
-	configuration.NextProtos = defaultNextProtocols
+	tlsConfiguration = t.TLSConfiguration.Clone()
+	tlsConfiguration.GetCertificate = manager.GetCertificate
+	tlsConfiguration.NextProtos = defaultNextProtocols
 
 	return
 }
