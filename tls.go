@@ -3,8 +3,6 @@ package tls
 import (
 	"crypto/tls"
 	"errors"
-	"os"
-	"path"
 
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
@@ -18,7 +16,7 @@ type (
 
 const (
 	DefaultProtocol              string = "http/1.1"
-	DefaultCertificatesCachePath string = "certificates"
+	DefaultCertificatesCachePath string = "certificatesCache"
 )
 
 const (
@@ -136,17 +134,9 @@ func (t *TLS) Auto(email, certificatesCachePath string, hosts ...string) (tlsCon
 		certificatesCachePath = DefaultCertificatesCachePath
 	}
 
-	executable, err := os.Executable()
-	if err != nil {
-		return
-	}
-
-	directory := path.Dir(executable)
-	cache := path.Join(directory, certificatesCachePath)
-
 	manager := &autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache(cache),
+		Cache:      autocert.DirCache(certificatesCachePath),
 		HostPolicy: autocert.HostWhitelist(hosts...),
 		Email:      email,
 	}
