@@ -70,7 +70,6 @@ var (
 func NewTLS(tlsVersion int) (t *TLS, err error) {
 	t = &TLS{
 		TLSConfiguration: &tls.Config{
-			ClientAuth:    tls.VerifyClientCertIfGiven,
 			Renegotiation: tls.RenegotiateOnceAsClient,
 			MaxVersion:    tls.VersionTLS13,
 		},
